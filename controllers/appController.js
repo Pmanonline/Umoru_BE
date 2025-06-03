@@ -210,7 +210,7 @@ const login = async (req, res) => {
     }
 
     const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "30d",
+      expiresIn: "3d",
     });
 
     return res.status(200).json({
@@ -263,7 +263,7 @@ const verifyAdminOTP = async (req, res) => {
 
     // Generate new token
     const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "30d",
+      expiresIn: "3d",
     });
 
     // Clear OTP after successful verification
@@ -312,10 +312,7 @@ const forgotPassword = async (req, res) => {
     console.log("Reset token:", resetToken);
     console.log("Token expiration time:", user.resetPasswordExpires);
 
-    const frontendURL =
-      process.env.NODE_ENV === "production"
-        ? process.env.FRONTEND_URL
-        : "http://localhost:5173";
+    const frontendURL = process.env.FRONTEND_URL;
 
     const resetUrl = `${frontendURL}/reset-password/${resetToken}`;
     const mailOptions = {
