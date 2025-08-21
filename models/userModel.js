@@ -29,15 +29,16 @@ const UserSchema = new mongoose.Schema(
       default: uuidv4,
       unique: true,
     },
-    refreshTokens: [
-      {
-        token: { type: String },
-        createdAt: { type: Date, default: Date.now },
-        expiresAt: { type: Date },
-        deviceInfo: { type: String },
-      },
-    ],
-    otp: { type: String }, // OTP field
+    // refreshTokens: [
+    //   {
+    //     token: { type: String },
+    //     createdAt: { type: Date, default: Date.now },
+    //     expiresAt: { type: Date },
+    //     deviceInfo: { type: String },
+    //   },
+    // ],
+    otp: { type: String },
+    refreshToken: { type: String },
     otpExpiresAt: { type: Date },
 
     image: {

@@ -8,6 +8,11 @@ const {
   forgotPassword,
   resetPassword,
   handleGoogleLogin,
+  handleFacebookLogin,
+  handleTwitterLogin,
+  refreshToken,
+  getNewsletterSubscribers,
+  NewLetterSubscribe,
 } = require("../controllers/appController.js");
 const { registerMail } = require("../controllers/mailer.js");
 const { body, validationResult } = require("express-validator");
@@ -21,5 +26,10 @@ router.route("/forgot-password").post(forgotPassword);
 router.post("/reset-password/:token", resetPassword);
 router.post("/verifyAdminOTP", verifyAdminOTP);
 router.post("/google-login", handleGoogleLogin);
+router.post("/facebook-login", handleFacebookLogin);
+router.post("/twitter-login", handleTwitterLogin);
+router.post("/refresh-token", refreshToken);
+router.post("/newsletter-signup", NewLetterSubscribe);
+router.get("/getNewsletterSubscribers", getNewsletterSubscribers);
 
 module.exports = router;

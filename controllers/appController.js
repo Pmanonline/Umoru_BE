@@ -1,4 +1,5 @@
 const UserModel = require("../models/userModel");
+const NewsletterSubscription = require("../models/NewsLetterModel");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const otpGenerator = require("otp-generator");
@@ -7,8 +8,12 @@ const dotenv = require("dotenv");
 const validator = require("validator");
 const JWT_SECRET = process.env.JWT_SECRET || "Qwe123123";
 const crypto = require("crypto");
-
+const axios = require("axios");
 dotenv.config();
+const {
+  generateAccessToken,
+  generateRefreshToken,
+} = require("../middlewares/tokenUtils");
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -209,12 +214,26 @@ const login = async (req, res) => {
       }
     }
 
-    const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "3d",
-    });
+    // Generate access and refresh tokens
+    const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    // Store refresh token in user document
+    user.refreshToken = refreshToken;
+
+    // log token values
+    console.log(
+      `[Login] Tokens issued for user ${
+        user._id
+      } at ${new Date().toISOString()} (WAT):`
+    );
+    console.log(`  Access Token: ${accessToken.substring(0, 10)}...`);
+    console.log(`  Refresh Token: ${refreshToken.substring(0, 10)}...`);
+    await user.save();
 
     return res.status(200).json({
-      token,
+      accessToken,
+      refreshToken,
       user: userData,
     });
   } catch (error) {
@@ -222,6 +241,92 @@ const login = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+const refreshToken = async (req, res) => {
+  const { refreshToken: refreshTokenFromClient } = req.body;
+
+  if (!refreshTokenFromClient) {
+    return res.status(401).json({ message: "Refresh token is required" });
+  }
+
+  try {
+    // Verify refresh token
+    const decoded = jwt.verify(refreshTokenFromClient, JWT_SECRET);
+    const user = await UserModel.findOne({
+      _id: decoded._id,
+      refreshToken: refreshTokenFromClient,
+    });
+
+    if (!user) {
+      return res.status(403).json({ message: "Invalid refresh token" });
+    }
+
+    // Generate new access token
+    const newAccessToken = generateAccessToken(user._id);
+
+    res.status(200).json({
+      accessToken: newAccessToken,
+      user: {
+        _id: user._id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error("Refresh token error:", error);
+    res.status(403).json({ message: "Invalid or expired refresh token" });
+  }
+};
+
+// const login = async (req, res) => {
+//   const { email, password } = req.body;
+
+//   try {
+//     const user = await UserModel.findOne({ email });
+//     if (!user || !(await bcrypt.compare(password, user.password))) {
+//       return res.status(400).json({ message: "Invalid credentials" });
+//     }
+
+//     const userData = {
+//       _id: user._id,
+//       username: user.username,
+//       email: user.email,
+//       role: user.role,
+//     };
+
+//     if (user.role === "admin") {
+//       try {
+//         const otp = generateOTP();
+//         user.otp = otp;
+//         user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+//         await user.save();
+
+//         await sendOTPEmail(email, otp);
+
+//         return res.status(200).json({
+//           message: "OTP sent to your email",
+//           requireOTP: true,
+//           user: userData,
+//         });
+//       } catch (error) {
+//         console.error("OTP generation/sending error:", error);
+//         return res.status(500).json({ message: "Failed to send OTP" });
+//       }
+//     }
+
+//     const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
+//       expiresIn: "3d",
+//     });
+
+//     return res.status(200).json({
+//       token,
+//       user: userData,
+//     });
+//   } catch (error) {
+//     console.error("Login Error:", error);
+//     res.status(500).json({ message: "Internal server error" });
+//   }
+// };
 
 const verifyAdminOTP = async (req, res) => {
   const { userId, email, otp } = req.body;
@@ -314,7 +419,10 @@ const forgotPassword = async (req, res) => {
 
     const frontendURL = process.env.FRONTEND_URL;
 
-    const resetUrl = `${frontendURL}/reset-password/${resetToken}`;
+    // Include both token and email in the reset URL as query parameters
+    const resetUrl = `${frontendURL}/reset-password?token=${resetToken}&email=${encodeURIComponent(
+      email
+    )}`;
     const mailOptions = {
       to: user.email,
       from: process.env.EMAIL_USER,
@@ -378,29 +486,20 @@ const resetPassword = async (req, res) => {
 
 const handleGoogleLogin = async (req, res) => {
   const { credential } = req.body;
-
   try {
     const decoded = jwt.decode(credential);
-
-    if (!decoded) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid Google token",
-      });
-    }
-
+    if (!decoded)
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid Google token" });
     let user = await UserModel.findOne({ email: decoded.email });
-
-    if (user && user.role === "admin") {
+    if (user && user.role === "admin")
       return res.status(403).json({
         success: false,
         message:
           "Admin accounts cannot login through Google authentication. Please use the standard login route.",
       });
-    }
-
     if (!user) {
-      // Create new user if doesn't exist
       user = new UserModel({
         email: decoded.email,
         username: decoded.name,
@@ -410,11 +509,9 @@ const handleGoogleLogin = async (req, res) => {
       });
       await user.save();
     }
-
     const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
       expiresIn: "30d",
     });
-
     res.status(200).json({
       success: true,
       token,
@@ -428,13 +525,202 @@ const handleGoogleLogin = async (req, res) => {
     });
   } catch (error) {
     console.error("Google login error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error processing Google login",
-    });
+    res
+      .status(500)
+      .json({ success: false, message: "Error processing Google login" });
   }
 };
 
+// New handleFacebookLogin
+const handleFacebookLogin = async (req, res) => {
+  const { accessToken } = req.body;
+  try {
+    const { data } = await axios.get(
+      `https://graph.facebook.com/v12.0/me?fields=id,name,email&access_token=${accessToken}`
+    );
+    let user = await UserModel.findOne({ email: data.email });
+    if (user && user.role === "admin")
+      return res.status(403).json({
+        success: false,
+        message:
+          "Admin accounts cannot login through Facebook authentication. Please use the standard login route.",
+      });
+    if (!user) {
+      user = new UserModel({
+        email: data.email,
+        username: data.name,
+        facebookId: data.id,
+        role: "user",
+      });
+      await user.save();
+    }
+    const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "30d",
+    });
+    res.status(200).json({
+      success: true,
+      token,
+      user: {
+        _id: user._id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error("Facebook login error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Error processing Facebook login" });
+  }
+};
+
+// New handleTwitterLogin
+const handleTwitterLogin = async (req, res) => {
+  const { oauthToken, oauthVerifier } = req.body;
+  try {
+    // Twitter OAuth 1.0a requires additional setup (e.g., using a library like 'twitter-api-v2' or 'oauth-1.0a')
+    // This is a simplified example; you'll need to implement the full OAuth flow
+    const userData = await axios.get(`https://api.twitter.com/2/users/me`, {
+      headers: { Authorization: `Bearer ${process.env.TWITTER_BEARER_TOKEN}` },
+    });
+    let user = await UserModel.findOne({ twitterId: userData.data.id });
+    if (user && user.role === "admin")
+      return res.status(403).json({
+        success: false,
+        message:
+          "Admin accounts cannot login through Twitter authentication. Please use the standard login route.",
+      });
+    if (!user) {
+      user = new UserModel({
+        twitterId: userData.data.id,
+        username: userData.data.name,
+        role: "user",
+      });
+      await user.save();
+    }
+    const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: "30d",
+    });
+    res.status(200).json({
+      success: true,
+      token,
+      user: { _id: user._id, username: user.username, role: user.role },
+    });
+  } catch (error) {
+    console.error("Twitter login error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Error processing Twitter login" });
+  }
+};
+
+const NewLetterSubscribe = async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: "Email is required." });
+  }
+
+  try {
+    const subscription = new NewsletterSubscription({ email });
+    await subscription.save();
+    res.status(201).json({ message: "Subscription successful!" });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ message: "Email already subscribed." });
+    }
+    console.error(error);
+    res.status(500).json({ message: "An error occurred. Please try again." });
+  }
+};
+
+const getNewsletterSubscribers = async (req, res) => {
+  try {
+    const today = new Date();
+
+    const weekStart = moment().subtract(7, "days").toDate();
+    const monthStart = moment().subtract(30, "days").toDate();
+    const prevMonthStart = moment().subtract(60, "days").toDate();
+
+    const totalSubscribers = await NewsletterSubscription.countDocuments();
+
+    const weeklySubscribers = await NewsletterSubscription.countDocuments({
+      createdAt: { $gte: weekStart },
+    });
+
+    const monthlySubscribers = await NewsletterSubscription.countDocuments({
+      createdAt: { $gte: monthStart },
+    });
+
+    const prevMonthSubscribers = await NewsletterSubscription.countDocuments({
+      createdAt: {
+        $gte: prevMonthStart,
+        $lt: monthStart,
+      },
+    });
+
+    const weeklyBreakdown = await NewsletterSubscription.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: weekStart },
+        },
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $sort: { _id: 1 },
+      },
+    ]);
+
+    const monthlyBreakdown = await NewsletterSubscription.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: monthStart },
+        },
+      },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $sort: { _id: 1 },
+      },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalSubscribers,
+        weeklySubscribers,
+        monthlySubscribers,
+        prevMonthSubscribers,
+        weeklyBreakdown,
+        monthlyBreakdown,
+        growthRate: {
+          monthly: (
+            ((monthlySubscribers - prevMonthSubscribers) /
+              prevMonthSubscribers) *
+            100
+          ).toFixed(2),
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching newsletter subscribers:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching subscriber data",
+      error: error.message,
+    });
+  }
+};
 module.exports = {
   registerUser,
   registerAdmin,
@@ -443,5 +729,10 @@ module.exports = {
   resetPassword,
   verifyAdminOTP,
   handleGoogleLogin,
+  handleFacebookLogin,
+  handleTwitterLogin,
   logout,
+  refreshToken,
+  getNewsletterSubscribers,
+  NewLetterSubscribe,
 };
