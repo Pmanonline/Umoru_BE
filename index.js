@@ -110,6 +110,7 @@
 // });
 
 // module.exports = app;
+
 const express = require("express");
 const path = require("path");
 const morgan = require("morgan");
@@ -117,8 +118,6 @@ const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const session = require("express-session");
-const fileUpload = require("express-fileupload");
-const fs = require("fs");
 
 const connectDB = require("./config/db.config");
 const { errorHandlingMiddleware } = require("./middlewares/errorHandling.js");
@@ -177,25 +176,7 @@ app.use(
   })
 );
 
-// File upload middleware
-app.use(
-  fileUpload({
-    useTempFiles: true,
-    tempFileDir: "/tmp/",
-    limits: { fileSize: 5 * 1024 * 1024 },
-    abortOnLimit: true,
-    responseOnLimit: "File size limit exceeded (5MB)",
-  })
-);
-
-// Static uploads folder
-const uploadsDir = path.join(__dirname, "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-app.use("/uploads", express.static(uploadsDir));
-
-// Routes
+// 🚀 Routes
 app.use("/api", Routes);
 app.use("/api", UserRoutes);
 app.use("/api", AuthorRoutes);
