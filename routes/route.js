@@ -13,6 +13,7 @@ const {
   refreshToken,
   getNewsletterSubscribers,
   NewLetterSubscribe,
+  TwitterAuth,
 } = require("../controllers/appController.js");
 const { registerMail } = require("../controllers/mailer.js");
 const { body, validationResult } = require("express-validator");
@@ -28,6 +29,7 @@ router.post("/verifyAdminOTP", verifyAdminOTP);
 router.post("/google-login", handleGoogleLogin);
 router.post("/facebook-login", handleFacebookLogin);
 router.post("/twitter-login", handleTwitterLogin);
+router.get("/auth/twitter/auth", TwitterAuth);
 router.post("/refresh-token", refreshToken);
 router.post("/newsletter-signup", NewLetterSubscribe);
 router.get("/getNewsletterSubscribers", getNewsletterSubscribers);

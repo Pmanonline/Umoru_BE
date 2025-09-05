@@ -291,16 +291,34 @@ app.use(morgan("dev"));
 app.use(cookieParser());
 
 // Session middleware
+// app.use(
+//   session({
+//     secret: process.env.SESSION_SECRET || "your_session_secret",
+//     resave: false,
+//     saveUninitialized: true,
+//     cookie: {
+//       httpOnly: true,
+//       secure: process.env.NODE_ENV === "production",
+//       sameSite: "strict",
+//     },
+//   })
+// );
+
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "your_session_secret",
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
     cookie: {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      secure: process.env.NODE_ENV === "production", // false for local dev
+      maxAge: 3600000, // 1 hour
     },
+  })
+);
+app.use(
+  cors({
+    origin: "http://localhost:5173", // Frontend URL
+    credentials: true, // Allow session cookies
   })
 );
 

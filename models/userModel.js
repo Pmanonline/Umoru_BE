@@ -18,6 +18,8 @@ const UserSchema = new mongoose.Schema(
     googleId: {
       type: String,
     },
+    facebookId: { type: String, unique: true, sparse: true },
+    twitterId: { type: String, unique: true, sparse: true },
     verifiedEmail: {
       type: Boolean,
     },
