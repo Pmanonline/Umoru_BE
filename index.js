@@ -237,6 +237,7 @@
 //     process.exit(1);
 //   });
 // }
+
 const express = require("express");
 const morgan = require("morgan");
 const cookieParser = require("cookie-parser");
@@ -271,7 +272,7 @@ connectDB();
 // CORS Configuration
 const allowedOrigin =
   process.env.NODE_ENV === "production"
-    ? process.env.FRONTEND_URL || "*"
+    ? process.env.FRONTEND_URL || "https://umoru-fe-jaca.vercel.app"
     : "http://localhost:5173";
 
 const corsOptions = {
@@ -290,20 +291,6 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(morgan("dev"));
 app.use(cookieParser());
 
-// Session middleware
-// app.use(
-//   session({
-//     secret: process.env.SESSION_SECRET || "your_session_secret",
-//     resave: false,
-//     saveUninitialized: true,
-//     cookie: {
-//       httpOnly: true,
-//       secure: process.env.NODE_ENV === "production",
-//       sameSite: "strict",
-//     },
-//   })
-// );
-
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "your_session_secret",
@@ -313,12 +300,6 @@ app.use(
       secure: process.env.NODE_ENV === "production", // false for local dev
       maxAge: 3600000, // 1 hour
     },
-  })
-);
-app.use(
-  cors({
-    origin: "http://localhost:5173", // Frontend URL
-    credentials: true, // Allow session cookies
   })
 );
 
